@@ -1,0 +1,249 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - nom: string
+    //   - telephone: string (optional)
+    //   - role: string ("ADMIN", "SERVEUR", "CAISSIER")
+    //   - email: string
+    //
+    // Collection: tables
+    // Document ID: {tableId}
+    // Fields:
+    //   - numero: number
+    //   - statut: string ("LIBRE", "OCCUPEE", "ATTENTE_PAIEMENT")
+    //
+    // Collection: products
+    // Document ID: {productId}
+    // Fields:
+    //   - nom: string
+    //   - categorie: string
+    //   - prixUSD: number
+    //   - stockActuel: number
+    //   - seuilAlerte: number
+    //   - besoinVidange: boolean
+    //
+    // Collection: orders
+    // Document ID: {orderId}
+    // Fields:
+    //   - tableId: string
+    //   - serveurId: string
+    //   - items: list of maps
+    //   - statut: string
+    //   - modePaiement: string (optional)
+    //   - transactionId: string (optional)
+    //   - createdAt: number
+    //   - vidangesDues: number
+    //
+    // Collection: settings
+    // Document ID: {settingId}
+    // Fields:
+    //   - tauxUSD_CDF: number
+    //   - taxeDGRK: number
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.email == "lionlnl21@gmail.com";
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'
+      );
+    }
+
+    function isGerant() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'GERANT';
+    }
+
+    function isAdminOrGerant() {
+      return isAdmin() || isGerant();
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserRestaurantId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.restaurantId;
+    }
+
+    function isSameRestaurant(data) {
+      return isSuperAdmin() || (data.restaurantId is string && (
+        (request.auth.uid == data.restaurantId) || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.restaurantId == data.restaurantId)
+      ));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.nom is string && data.nom.size() > 0 && data.nom.size() < 100 &&
+             data.identifiant is string && data.identifiant.size() > 0 && data.identifiant.size() < 50 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['ADMIN', 'GERANT', 'SERVEUR', 'CAISSIER', 'CUISINE', 'BLOCKED', 'DELETED'] &&
+             data.restaurantId is string && data.restaurantId.size() > 0 &&
+             (!('telephone' in data) || (data.telephone is string && data.telephone.size() < 20));
+    }
+
+    function isValidTable(data) {
+      return data.numero is number && data.numero > 0 &&
+             data.statut in ['LIBRE', 'OCCUPEE', 'ATTENTE_PAIEMENT'] &&
+             data.restaurantId is string;
+    }
+
+    function isValidProduct(data) {
+      return data.nom is string && data.nom.size() > 0 && data.nom.size() < 100 &&
+             data.categorie in ['Bière', 'Sucré', 'Forte', 'Cuisine'] &&
+             data.prixUSD is number && data.prixUSD >= 0 &&
+             data.stockActuel is number && data.stockActuel >= 0 &&
+             data.seuilAlerte is number && data.seuilAlerte >= 0 &&
+             data.besoinVidange is bool &&
+             data.restaurantId is string;
+    }
+
+    function isValidOrder(data) {
+      return data.tableId is string && data.tableId.size() > 0 && data.tableId.size() < 50 &&
+             data.serveurId is string && data.serveurId.size() > 0 && data.serveurId.size() < 50 &&
+             data.statut in ['EN_COURS', 'PRET', 'SERVI', 'PAYE'] &&
+             data.createdAt is number &&
+             data.vidangesDues is number && data.vidangesDues >= 0 &&
+             data.items is list && data.items.size() >= 0 && data.items.size() < 100 &&
+             data.restaurantId is string &&
+             (!('modePaiement' in data) || data.modePaiement in ['CASH_USD', 'CASH_CDF', 'M_PESA', 'AIRTEL_MONEY', 'ORANGE_MONEY']) &&
+             (!('transactionId' in data) || (data.transactionId is string && data.transactionId.size() < 100)) &&
+             (!('readyAt' in data) || data.readyAt is number) &&
+             (!('paidAt' in data) || data.paidAt is number) &&
+             (!('cashierId' in data) || (data.cashierId is string && data.cashierId.size() < 50)) &&
+             (!('kitchenId' in data) || (data.kitchenId is string && data.kitchenId.size() < 50));
+    }
+
+    function isValidExpense(data) {
+      return data.description is string && data.description.size() > 0 && data.description.size() < 500 &&
+             data.montantUSD is number && data.montantUSD >= 0 &&
+             data.categorie in ['Personnel', 'Achat Stock', 'Maintenance', 'Loyer/Charges', 'Autre'] &&
+             data.date is number &&
+             data.createdBy is string && data.createdBy.size() < 50 &&
+             data.restaurantId is string;
+    }
+
+    function isValidSettings(data) {
+      return data.tauxUSD_CDF is number && data.tauxUSD_CDF > 0 &&
+             data.taxeDGRK is number && data.taxeDGRK >= 0 &&
+             (!('nomEtablissement' in data) || (data.nomEtablissement is string && data.nomEtablissement.size() < 100)) &&
+             (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() < 500)) &&
+             (!('idNat' in data) || (data.idNat is string && data.idNat.size() < 50)) &&
+             (!('rccm' in data) || (data.rccm is string && data.rccm.size() < 50)) &&
+             (!('nif' in data) || (data.nif is string && data.nif.size() < 50)) &&
+             (!('adresse' in data) || (data.adresse is string && data.adresse.size() < 200)) &&
+             (!('telephone' in data) || (data.telephone is string && data.telephone.size() < 50));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isSuperAdmin() || (isAuthenticated() && (isOwner(userId) || (resource != null && isSameRestaurant(resource.data))));
+      // Users can create their own profile, but only admins can set the role to ADMIN.
+      // If not admin, role must be SERVEUR or CAISSIER.
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isSuperAdmin() || (
+          (isOwner(userId) || isAdminOrGerant()) && 
+          isSameRestaurant(request.resource.data) && 
+          (isAdminOrGerant() || request.resource.data.role in ['SERVEUR', 'CAISSIER', 'CUISINE'])
+        )
+      );
+      // Only admins can update roles. Users can update their own nom/telephone.
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+        (!('restaurantId' in resource.data) || isSameRestaurant(resource.data)) && 
+        isSameRestaurant(request.resource.data) && (
+        isAdmin() || (isGerant() && !(request.resource.data.role in ['ADMIN', 'GERANT'])) || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.email == resource.data.email)
+      );
+      allow delete: if isAdmin() && isSameRestaurant(resource.data);
+    }
+
+    match /tables/{tableId} {
+      allow read: if isSuperAdmin() || (isAuthenticated() && (resource == null || isSameRestaurant(resource.data)));
+      allow create: if isAdmin() && isValidTable(request.resource.data) && isSameRestaurant(request.resource.data);
+      // Anyone authenticated can update the status of a table
+      allow update: if isAuthenticated() && isValidTable(request.resource.data) && isSameRestaurant(resource.data) && isSameRestaurant(request.resource.data) && (
+        isAdmin() || (request.resource.data.numero == resource.data.numero)
+      );
+      allow delete: if isAdmin() && isSameRestaurant(resource.data);
+    }
+
+    match /products/{productId} {
+      allow read: if isSuperAdmin() || (isAuthenticated() && (resource == null || isSameRestaurant(resource.data)));
+      allow create: if isAdmin() && isValidProduct(request.resource.data) && isSameRestaurant(request.resource.data);
+      // Anyone authenticated can update stock (when ordering)
+      allow update: if isAuthenticated() && isValidProduct(request.resource.data) && isSameRestaurant(resource.data) && isSameRestaurant(request.resource.data) && (
+        isAdmin() || (
+          request.resource.data.nom == resource.data.nom &&
+          request.resource.data.categorie == resource.data.categorie &&
+          request.resource.data.prixUSD == resource.data.prixUSD &&
+          request.resource.data.seuilAlerte == resource.data.seuilAlerte &&
+          request.resource.data.besoinVidange == resource.data.besoinVidange
+        )
+      );
+      allow delete: if isAdmin() && isSameRestaurant(resource.data);
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSuperAdmin() || (isAuthenticated() && (resource == null || isSameRestaurant(resource.data)));
+      allow create: if isAuthenticated() && isSameRestaurant(request.resource.data) && (isAdminOrGerant() || (isValidOrder(request.resource.data) && request.resource.data.serveurId == request.auth.uid));
+      allow update: if isAuthenticated() && isSameRestaurant(resource.data) && isSameRestaurant(request.resource.data) && (isAdminOrGerant() || isValidOrder(request.resource.data));
+      allow delete: if isAdmin() && isSameRestaurant(resource.data);
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isSuperAdmin() || (isAdminOrGerant() && (resource == null || isSameRestaurant(resource.data)));
+      allow create: if isAdmin() && isValidExpense(request.resource.data) && isSameRestaurant(request.resource.data);
+      allow update: if isAdmin() && isValidExpense(request.resource.data) && isSameRestaurant(resource.data) && isSameRestaurant(request.resource.data);
+      allow delete: if isAdmin() && isSameRestaurant(resource.data);
+    }
+
+    match /staff_activity/{activityId} {
+      allow read: if isAdminOrGerant() && (resource == null || isSameRestaurant(resource.data));
+      allow create: if isAuthenticated() && isSameRestaurant(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create, update, delete: if isSuperAdmin() || (isAdmin() && isValidSettings(request.resource.data) && settingId == getUserRestaurantId());
+    }
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application (Admin, Serveur, Caissier, Cuisine)",
+      "type": "object",
+      "properties": {
+        "nom": { "type": "string", "description": "User's display name" },
+        "telephone": { "type": "string", "description": "User's phone number" },
+        "role": { "type": "string", "enum": ["ADMIN", "SERVEUR", "CAISSIER", "CUISINE", "DELETED"], "description": "User's role" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" }
+      },
+      "required": ["nom", "role", "email"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "A table in the restaurant",
+      "type": "object",
+      "properties": {
+        "numero": { "type": "number", "description": "Table number" },
+        "statut": { "type": "string", "enum": ["LIBRE", "OCCUPEE", "ATTENTE_PAIEMENT"], "description": "Current status of the table" }
+      },
+      "required": ["numero", "statut"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "A product for sale",
+      "type": "object",
+      "properties": {
+        "nom": { "type": "string", "description": "Product name" },
+        "categorie": { "type": "string", "enum": ["Bière", "Sucré", "Forte", "Cuisine"], "description": "Product category" },
+        "prixUSD": { "type": "number", "description": "Price in USD" },
+        "stockActuel": { "type": "number", "description": "Current stock level" },
+        "seuilAlerte": { "type": "number", "description": "Low stock alert threshold" },
+        "besoinVidange": { "type": "boolean", "description": "Whether the product requires an empty bottle return" }
+      },
+      "required": ["nom", "categorie", "prixUSD", "stockActuel", "seuilAlerte", "besoinVidange"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "An item within an order",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "description": "Reference to the product" },
+        "quantite": { "type": "number", "description": "Quantity ordered" },
+        "prixUnitaireUSD": { "type": "number", "description": "Price per unit at the time of order" }
+      },
+      "required": ["productId", "quantite", "prixUnitaireUSD"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order",
+      "type": "object",
+      "properties": {
+        "tableId": { "type": "string", "description": "Reference to the table" },
+        "serveurId": { "type": "string", "description": "Reference to the server (User)" },
+        "items": { "type": "array", "items": { "$ref": "#/entities/OrderItem" }, "description": "List of items ordered" },
+        "statut": { "type": "string", "enum": ["EN_COURS", "PRET", "SERVI", "PAYE"], "description": "Order status" },
+        "modePaiement": { "type": "string", "enum": ["CASH_USD", "CASH_CDF", "M_PESA", "AIRTEL_MONEY", "ORANGE_MONEY"], "description": "Payment mode" },
+        "transactionId": { "type": "string", "description": "Transaction ID for mobile money" },
+        "createdAt": { "type": "number", "description": "Timestamp of order creation" },
+        "readyAt": { "type": "number", "description": "Timestamp when order was ready" },
+        "paidAt": { "type": "number", "description": "Timestamp when order was paid" },
+        "cashierId": { "type": "string", "description": "Reference to the cashier who processed payment" },
+        "kitchenId": { "type": "string", "description": "Reference to the kitchen staff who marked it ready" },
+        "vidangesDues": { "type": "number", "description": "Number of empty bottles owed" }
+      },
+      "required": ["tableId", "serveurId", "items", "statut", "createdAt", "vidangesDues"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "An establishment expense",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string", "description": "Description of the expense" },
+        "montantUSD": { "type": "number", "description": "Amount in USD" },
+        "categorie": { "type": "string", "enum": ["Personnel", "Achat Stock", "Maintenance", "Loyer/Charges", "Autre"], "description": "Expense category" },
+        "date": { "type": "number", "description": "Timestamp of the expense" },
+        "createdBy": { "type": "string", "description": "Reference to the user who created the expense" }
+      },
+      "required": ["description", "montantUSD", "categorie", "date", "createdBy"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "tauxUSD_CDF": { "type": "number", "description": "Exchange rate from USD to CDF" },
+        "taxeDGRK": { "type": "number", "description": "Consumption tax percentage" }
+      },
+      "required": ["tauxUSD_CDF", "taxeDGRK"]
+    },
+    "StaffActivity": {
+      "title": "StaffActivity",
+      "description": "Logs of staff login, logout, and actions",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Reference to the User" },
+        "restaurantId": { "type": "string", "description": "Reference to the restaurant" },
+        "action": { "type": "string", "enum": ["LOGIN", "LOGOUT", "ORDER_SUBMIT"], "description": "Action performed" },
+        "timestamp": { "type": "number", "description": "Timestamp of action" }
+      },
+      "required": ["uid", "restaurantId", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles and roles"
+    },
+    "/tables/{tableId}": {
+      "schema": { "$ref": "#/entities/Table" },
+      "description": "Stores restaurant tables"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Stores inventory products"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Stores customer orders"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Stores establishment expenses"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Stores global settings (e.g., settingId = 'global')"
+    },
+    "/staff_activity/{activityId}": {
+      "schema": { "$ref": "#/entities/StaffActivity" },
+      "description": "Stores staff activity logs"
+    }
+  }
+}

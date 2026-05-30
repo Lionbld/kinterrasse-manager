@@ -1,0 +1,7 @@
+{
+  "name": "KinTerrasse Manager",
+  "description": "Une application de gestion de terrasse optimisée pour le marché de Kinshasa, gérant le multi-devises (USD/CDF), le suivi des vidanges, les paiements mobiles et la clôture de caisse.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

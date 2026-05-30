@@ -1,0 +1,10 @@
+{
+  "projectId": "kinterrasse-manager-pos",
+  "appId": "1:912164424007:web:c6f50aacb727b52e172462",
+  "apiKey": "AIzaSyB6TITdZ5kxIs7Xl-FPuoz_7u9X7GUfTsg",
+  "authDomain": "kinterrasse-manager-pos.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "kinterrasse-manager-pos.firebasestorage.app",
+  "messagingSenderId": "912164424007",
+  "measurementId": ""
+}
