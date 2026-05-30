@@ -86,6 +86,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     pin: ''
   });
 
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUserData, setEditUserData] = useState({
+    nom: '',
+    role: UserRole.SERVEUR
+  });
+
   const handleExtendSubscription = async (id: string, months: number, currentEndsAt: number | undefined) => {
     try {
         const { doc, updateDoc } = await import('firebase/firestore');
@@ -249,6 +255,26 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         if (parsed.error) errorMessage = parsed.error;
       } catch (e) {}
       setNotification({ message: `Erreur: ${errorMessage}`, type: 'error' });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleUpdateStaff = async () => {
+    if (!editingUser) return;
+    if (!editUserData.nom) {
+      setNotification({ message: "Le nom ne peut pas être vide.", type: 'error' });
+      return;
+    }
+    try {
+      await onUpdateUser(editingUser.id, {
+        nom: editUserData.nom,
+        role: editUserData.role
+      });
+      setEditingUser(null);
+      setNotification({ message: "Membre du staff mis à jour !", type: 'success' });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err: any) {
+      setNotification({ message: `Erreur: ${err.message}`, type: 'error' });
       setTimeout(() => setNotification(null), 5000);
     }
   };
@@ -1071,6 +1097,51 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           )}
 
+          {editingUser && (
+            <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200">
+              <div className="md:col-span-2">
+                <h4 className="text-slate-900 dark:text-white font-bold text-sm">Modifier le membre du staff : <span className="text-indigo-500">{editingUser.nom}</span></h4>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Nom Complet</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                  value={editUserData.nom}
+                  onChange={(e) => setEditUserData({...editUserData, nom: e.target.value})}
+                  placeholder="Ex: Jean Dupont"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rôle</label>
+                <select 
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                  value={editUserData.role}
+                  onChange={(e) => setEditUserData({...editUserData, role: e.target.value as UserRole})}
+                >
+                  <option value={UserRole.SERVEUR}>Serveur</option>
+                  <option value={UserRole.CAISSIER}>Caissier</option>
+                  <option value={UserRole.CUISINE}>Cuisine</option>
+                  {currentUser.role === UserRole.ADMIN && <option value={UserRole.GERANT}>Gérant</option>}
+                </select>
+              </div>
+              <div className="md:col-span-2 flex gap-3 mt-2">
+                <button 
+                  onClick={() => setEditingUser(null)}
+                  className="px-6 py-3 rounded-xl bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold hover:bg-slate-200 dark:bg-slate-700 transition-all"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={handleUpdateStaff}
+                  className="px-6 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all"
+                >
+                  Enregistrer les modifications
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl border-2 border-slate-200 dark:border-slate-800 overflow-x-auto no-scrollbar">
             <table className="w-full text-left min-w-[600px]">
               <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase tracking-widest text-slate-500">
@@ -1109,6 +1180,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                       </button>
                       {u.id !== currentUser.id && (currentUser.role === UserRole.ADMIN || (currentUser.role === UserRole.GERANT && u.role !== UserRole.ADMIN && u.role !== UserRole.GERANT)) && (
                         <>
+                          <button 
+                            onClick={() => {
+                              setEditingUser(u);
+                              setEditUserData({ nom: u.nom, role: u.role });
+                            }}
+                            className="text-amber-400 hover:text-amber-300 text-xs font-bold mr-4"
+                          >
+                            Modifier
+                          </button>
                           {u.role === UserRole.BLOCKED ? (
                             <button 
                               onClick={async () => {
