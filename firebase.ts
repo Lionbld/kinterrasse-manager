@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import firebaseConfig from './firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -14,6 +15,7 @@ export const db = initializeFirestore(app, {
 }, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);
+export const functions = getFunctions(app, 'europe-west1');
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -89,16 +91,18 @@ export const loginWithEmailAndPin = async (email: string, pin: string) => {
   }
 };
 
-export const createStaffAccount = async (email: string, pin: string) => {
-  // We use a secondary app instance to create the user without logging out the current admin
-  const secondaryApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
-  const secondaryAuth = getAuth(secondaryApp);
+export const createStaffAccount = async (email: string, pin: string): Promise<string> => {
+  // Use Cloud Function (Admin SDK server-side) to create the auth account.
+  // This bypasses browser-level network restrictions on identitytoolkit.googleapis.com.
   try {
-    const result = await createUserWithEmailAndPassword(secondaryAuth, email, pin);
-    await signOut(secondaryAuth);
-    return result.user.uid;
+    const createStaffUser = httpsCallable<{ email: string; pin: string }, { uid: string }>(
+      functions,
+      'createStaffUser'
+    );
+    const result = await createStaffUser({ email, pin });
+    return result.data.uid;
   } catch (error) {
-    console.error("Error creating staff account", error);
+    console.error("Error creating staff account via Cloud Function", error);
     throw error;
   }
 };
