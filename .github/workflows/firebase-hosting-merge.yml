@@ -1,26 +1,33 @@
-name: Deploy to Firebase Hosting on push
+name: Deploy to Firebase on push
+
 on:
   push:
     branches:
       - main
       - master
+
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install App Dependencies
-        run: npm install
-      - name: Install Functions Dependencies
-        run: cd functions && npm install
-      - name: Build
-        run: npm run build
-      - name: Deploy to Firebase Hosting + Functions
-        uses: FirebaseExtended/action-hosting-deploy@v0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KINTERRASSE_MANAGER_POS }}
-          projectId: kinterrasse-manager-pos
-          siteId: kinterrasse-manager
-          channelId: live
-          targets: hosting,functions
+          node-version: '22'
+
+      - name: Install App Dependencies
+        run: npm ci
+
+      - name: Install Functions Dependencies
+        run: cd functions && npm ci
+
+      - name: Build App
+        run: npm run build
+
+      - name: Deploy Hosting + Functions
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KINTERRASSE_MANAGER_POS }}' > /tmp/sa_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa_key.json
+          npx -y firebase-tools@latest deploy --only hosting,functions --project kinterrasse-manager-pos --non-interactive
