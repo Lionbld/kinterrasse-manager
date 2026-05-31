@@ -24,7 +24,10 @@ jobs:
         run: npm run build
 
       - name: Deploy to Firebase Hosting
-        run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KINTERRASSE_MANAGER_POS }}' > /tmp/sa_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa_key.json
-          npx -y firebase-tools@latest deploy --only hosting --project kinterrasse-manager-pos --non-interactive
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KINTERRASSE_MANAGER_POS }}
+          projectId: kinterrasse-manager-pos
+          siteId: kinterrasse-manager
+          channelId: live
