@@ -1,4 +1,4 @@
-name: Deploy to Firebase on push
+name: Deploy to Firebase Hosting on push
 
 on:
   push:
@@ -12,22 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
-      - name: Install App Dependencies
+      - name: Install Dependencies
         run: npm ci
-
-      - name: Install Functions Dependencies
-        run: cd functions && npm ci
 
       - name: Build App
         run: npm run build
 
-      - name: Deploy Hosting + Functions
+      - name: Deploy to Firebase Hosting
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KINTERRASSE_MANAGER_POS }}' > /tmp/sa_key.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa_key.json
-          npx -y firebase-tools@latest deploy --only hosting,functions --project kinterrasse-manager-pos --non-interactive
+          npx -y firebase-tools@latest deploy --only hosting --project kinterrasse-manager-pos --non-interactive

@@ -1,13 +1,11 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import firebaseConfig from './firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with offline persistence enabled
-// We use a simpler persistence setup to avoid potential iframe/cross-tab restrictions in AI Studio
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
@@ -15,7 +13,6 @@ export const db = initializeFirestore(app, {
 }, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);
-export const functions = getFunctions(app, 'europe-west1');
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -92,17 +89,18 @@ export const loginWithEmailAndPin = async (email: string, pin: string) => {
 };
 
 export const createStaffAccount = async (email: string, pin: string): Promise<string> => {
-  // Use Cloud Function (Admin SDK server-side) to create the auth account.
-  // This bypasses browser-level network restrictions on identitytoolkit.googleapis.com.
+  // Use a secondary app instance to create the user without logging out the current admin.
+  // NOTE: This works on the deployed site (kinterrasse-manager.web.app).
+  // If testing locally and your network blocks identitytoolkit.googleapis.com,
+  // create staff from the deployed site instead: https://kinterrasse-manager.web.app
+  const secondaryApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
+  const secondaryAuth = getAuth(secondaryApp);
   try {
-    const createStaffUser = httpsCallable<{ email: string; pin: string }, { uid: string }>(
-      functions,
-      'createStaffUser'
-    );
-    const result = await createStaffUser({ email, pin });
-    return result.data.uid;
+    const result = await createUserWithEmailAndPassword(secondaryAuth, email, pin);
+    await signOut(secondaryAuth);
+    return result.user.uid;
   } catch (error) {
-    console.error("Error creating staff account via Cloud Function", error);
+    console.error("Error creating staff account", error);
     throw error;
   }
 };

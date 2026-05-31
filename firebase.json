@@ -2,10 +2,6 @@
   "firestore": {
     "rules": "firestore.rules"
   },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs22"
-  },
   "hosting": {
     "site": "kinterrasse-manager",
     "public": "dist",
