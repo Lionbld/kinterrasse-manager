@@ -14,7 +14,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   
   const [identifiant, setIdentifiant] = useState('');
   const [pin, setPin] = useState('');
-  const [restaurantName, setRestaurantName] = useState(localStorage.getItem('pos_restaurant_name') || '');
   const [loginMode, setLoginMode] = useState<'pin' | 'google'>('pin');
 
   // Anti Brute-Force
@@ -40,33 +39,52 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError(`Trop de tentatives. Réessayez dans ${Math.ceil((lockoutUntil - Date.now()) / 1000)}s`);
         return;
     }
-    if (!identifiant || !pin || (!restaurantName && !localStorage.getItem('pos_restaurant_name'))) {
-        setError('Veuillez remplir tous les champs');
+    if (!identifiant || !pin) {
+        setError('Veuillez remplir votre identifiant et votre code PIN');
         return;
     }
     setLoading(true);
     setError('');
     try {
-      let emailToUse = identifiant;
+      const identifiantNormalized = identifiant.toLowerCase().replace(/\s/g, '');
       
-      if (!identifiant.includes('@')) {
-        const nameToUse = restaurantName || localStorage.getItem('pos_restaurant_name') || '';
-        
-        // Find restaurant ID by name
-        const q = query(collection(db, 'settings'), where("nom", "==", nameToUse));
-        const querySnapshot = await getDocs(q);
-        
-        if (querySnapshot.empty) {
-            setError('Nom du restaurant introuvable.');
-            setLoading(false);
-            return;
+      // Search the users collection by identifiant to find the restaurantId
+      // This eliminates the need for the agent to know/type the restaurant name
+      let restaurantId = '';
+      
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('identifiant', '==', identifiantNormalized)
+      );
+      const usersSnap = await getDocs(usersQuery);
+
+      if (!usersSnap.empty) {
+        restaurantId = usersSnap.docs[0].data().restaurantId;
+      } else {
+        // Try case-insensitive match across all users
+        const allUsers = await getDocs(collection(db, 'users'));
+        const matched = allUsers.docs.find(d => 
+          d.data().identifiant?.toLowerCase().replace(/\s/g, '') === identifiantNormalized
+        );
+        if (matched) {
+          restaurantId = matched.data().restaurantId;
         }
-        
-        const idToUse = querySnapshot.docs[0].id;
-        emailToUse = `${identifiant.toLowerCase().replace(/\s/g, '')}@${idToUse}.pos`;
-        localStorage.setItem('pos_restaurant_name', nameToUse);
-        localStorage.setItem('pos_restaurant_id', idToUse);
       }
+
+      if (!restaurantId) {
+        // Last fallback: use stored restaurantId from previous session
+        const storedRestaurantId = localStorage.getItem('pos_restaurant_id');
+        if (storedRestaurantId) {
+          restaurantId = storedRestaurantId;
+        } else {
+          setError('Identifiant introuvable. Contactez votre administrateur.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      const emailToUse = `${identifiantNormalized}@${restaurantId}.pos`;
+      localStorage.setItem('pos_restaurant_id', restaurantId);
 
       await loginWithEmailAndPin(emailToUse, pin);
       setFailedAttempts(0);
@@ -78,7 +96,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           setLockoutUntil(Date.now() + 30000); // 30 seconds lockout
           setError('Trop de tentatives. Veuillez patienter 30 secondes.');
       } else {
-          setError(`Identifiant, PIN ou Nom de Restaurant incorrect (${3 - newAttempts} essais restants)`);
+          setError(`Identifiant ou code PIN incorrect (${3 - newAttempts} essais restants)`);
       }
       setPin(''); // Reset PIN for security
       setLoading(false);
@@ -161,18 +179,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         
         {loginMode === 'pin' ? (
             <form onSubmit={handlePinLogin} className="space-y-4 bg-slate-50 dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800">
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Nom du Restaurant</label>
-                    <div className="relative">
-                        <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                        <input 
-                            type="text" 
-                            value={restaurantName}
-                            onChange={(e) => setRestaurantName(e.target.value)}
-                            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-3 pl-10 pr-4 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                            placeholder="Entrez le nom du restaurant"
-                        />
-                    </div>
+                <div className="text-center mb-2">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Entrez votre identifiant et code PIN</p>
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Identifiant</label>
@@ -184,6 +192,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             onChange={(e) => setIdentifiant(e.target.value)}
                             className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-3 pl-10 pr-4 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
                             placeholder="ex: serveur1"
+                            autoComplete="username"
                         />
                     </div>
                 </div>
@@ -199,6 +208,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             onChange={(e) => setPin(e.target.value)}
                             className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-3 pl-10 pr-4 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors tracking-[0.5em] font-mono text-lg"
                             placeholder="••••"
+                            autoComplete="current-password"
                         />
                     </div>
                 </div>
